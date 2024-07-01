@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Mon, 1 Jul 2024 14:51:50 +0200
+Subject: [PATCH] Add Biome Cache API
+
+
+diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
+index 07e75978b4fc0e446e8aa46a40be5e371dc1c11b..fa1609ae129e0a9d613a1725c4b2f296511d40b9 100644
+--- a/src/main/java/org/bukkit/World.java
++++ b/src/main/java/org/bukkit/World.java
+@@ -46,6 +46,7 @@ import org.bukkit.util.Vector;
+ import org.jetbrains.annotations.Contract;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
++import javax.annotation.Nonnull;
+ 
+ /**
+  * Represents a world, which may contain entities, chunks and blocks
+@@ -4313,6 +4314,31 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
+     void clearBlockHighlights();
+     // Purpur end
+ 
++    // Wynbox start
++
++    /**
++     * Get the cached biome linked to the entire chunk
++     * @param chunk Chunk where the cached biome is linked
++     * @return {@link Biome}
++     */
++    @Nullable Biome getCachedBiome(Chunk chunk);
++
++    /**
++     * Get and remove the cached biome linked to the entire chunk
++     * @param chunk Chunk where the cached biome is linked
++     * @return {@link Biome}
++     */
++    @Nullable Biome removeCachedBiome(Chunk chunk);
++
++    /**
++     * Link a cached biome to an entire chunk
++     * @param chunk Chunk where the biome is linked
++     * @param biome Biome to cache
++     */
++    void setCachedBiome(@Nonnull Chunk chunk, @Nonnull Biome biome);
++
++    // Wynbox end
++
+     /**
+      * Get all {@link FeatureFlag} enabled in this world.
+      *
