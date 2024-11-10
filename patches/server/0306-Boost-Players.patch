@@ -1,0 +1,265 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Sun, 10 Nov 2024 22:04:49 +0100
+Subject: [PATCH] Boost Players
+
+
+diff --git a/src/main/java/fr/wynbox/boost/BoostConnection.java b/src/main/java/fr/wynbox/boost/BoostConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b89ba74ef1994239aa2eb4fdf35c0f621b482ed5
+--- /dev/null
++++ b/src/main/java/fr/wynbox/boost/BoostConnection.java
+@@ -0,0 +1,53 @@
++package fr.wynbox.boost;
++
++import io.netty.channel.ChannelHandlerContext;
++import net.minecraft.network.Connection;
++import net.minecraft.network.PacketListener;
++import net.minecraft.network.PacketSendListener;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.handshake.ClientIntent;
++import net.minecraft.network.protocol.status.ClientStatusPacketListener;
++import org.jetbrains.annotations.Nullable;
++import java.util.function.Consumer;
++
++public class BoostConnection extends Connection {
++
++
++    public BoostConnection() {
++        super(PacketFlow.CLIENTBOUND);
++    }
++
++    @Override
++    public void channelActive(final ChannelHandlerContext channelhandlercontext) throws Exception {}
++
++    @Override
++    public void channelInactive(final ChannelHandlerContext channelhandlercontext) {}
++
++    @Override
++    public void setListener(final PacketListener packetListener) {}
++
++    @Override
++    public void initiateServerboundStatusConnection(final String address, final int port, final ClientStatusPacketListener listener) {}
++
++    @Override
++    public void setClientboundProtocolAfterHandshake(final ClientIntent intent) {}
++
++    @Override
++    public void send(final Packet<?> packet) {
++    }
++
++    @Override
++    public void send(final Packet<?> packet, @Nullable final PacketSendListener callbacks) {
++    }
++
++    @Override
++    public void send(final Packet<?> packet, @Nullable final PacketSendListener callbacks, final boolean flush) {
++    }
++
++    @Override
++    public void runOnceConnected(final Consumer<Connection> task) {}
++
++    @Override
++    public void flushChannel() {}
++}
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index ac1e0c66f167218306504db6037cc1d6509072a0..0c9bacca83cde4eedb254da1aa70813b6993d321 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -179,6 +179,163 @@ public abstract class PlayerList {
+     }
+     abstract public void loadAndSaveFiles(); // Paper - fix converting txt to json file; moved from DedicatedPlayerList constructor
+ 
++    @Nullable
++    public Player placeBoostPlayer(fr.wynbox.boost.BoostProfile profile) {
++        if (this.playersByUUID.containsKey(profile.getUuid()) || this.playersByName.containsKey(profile.getUsername())) return null;
++        ServerLevel worldserver1 = ((CraftWorld) profile.getJoiningWorld()).getHandle();
++        final GameProfile gameprofile = new GameProfile(profile.getUuid(), profile.getUsername());
++        if (profile.getTexture() != null) {
++            final String texture = profile.getTexture();
++            final String signature = profile.getSignature();
++            if (signature != null) {
++                gameprofile.getProperties().put("textures", new com.mojang.authlib.properties.Property("textures", texture, signature));
++            } else {
++                gameprofile.getProperties().put("textures", new com.mojang.authlib.properties.Property("textures", texture));
++            }
++        }
++        ServerPlayer player = new ServerPlayer(server, worldserver1, gameprofile, ClientInformation.createDefault());
++        player.connection = new net.minecraft.server.network.ServerGamePacketListenerImpl(server, new fr.wynbox.boost.BoostConnection(), player, new net.minecraft.server.network.CommonListenerCookie(gameprofile, 0, player.clientInformation()));
++        player.isRealPlayer = false; // Paper
++        player.loginTime = System.currentTimeMillis(); // Paper - Replace OfflinePlayer#getLastPlayed
++        GameProfileCache usercache = this.server.getProfileCache();
++
++        String s;
++        if (usercache != null) {
++            Optional<GameProfile> optional = usercache.get(gameprofile.getId());
++
++            s = optional.map(GameProfile::getName).orElse(gameprofile.getName());
++            usercache.add(gameprofile);
++        } else {
++            s = gameprofile.getName();
++        }
++
++        CompoundTag nbttagcompound = this.load(player);
++        ResourceKey<Level> resourcekey = null; // Paper
++        // CraftBukkit start - Better rename detection
++        if (nbttagcompound != null && nbttagcompound.contains("bukkit")) {
++            CompoundTag bukkit = nbttagcompound.getCompound("bukkit");
++            s = bukkit.contains("lastKnownName", 8) ? bukkit.getString("lastKnownName") : s;
++        }
++        // CraftBukkit end
++
++        // Paper start - Entity#getEntitySpawnReason
++        if (nbttagcompound == null) {
++            player.spawnReason = org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT; // set Player SpawnReason to DEFAULT on first login
++            // Paper start - reset to main world spawn if first spawn or invalid world
++        }
++
++        player.setServerLevel(worldserver1);
++
++        Player spawnPlayer = player.getBukkitEntity();
++        org.spigotmc.event.player.PlayerSpawnLocationEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(spawnPlayer, spawnPlayer.getLocation()); // Paper use our duplicate event
++        this.cserver.getPluginManager().callEvent(ev);
++
++        Location loc = ev.getSpawnLocation();
++        worldserver1 = ((CraftWorld) loc.getWorld()).getHandle();
++
++        player.spawnIn(worldserver1);
++        player.gameMode.setLevel((ServerLevel) player.level());
++        // Paper start - set raw so we aren't fully joined to the world (not added to chunk or world)
++        player.setPosRaw(loc.getX(), loc.getY(), loc.getZ());
++        player.setRot(loc.getYaw(), loc.getPitch());
++        // Paper end - set raw so we aren't fully joined to the world
++        // Spigot end
++
++        // CraftBukkit - Moved message to after join
++        // PlayerList.LOGGER.info("{}[{}] logged in with entity id {} at ({}, {}, {})", new Object[]{entityplayer.getName().getString(), s1, entityplayer.getId(), entityplayer.getX(), entityplayer.getY(), entityplayer.getZ()});
++        LevelData worlddata = worldserver1.getLevelData();
++
++        player.loadGameTypes(nbttagcompound);
++        GameRules gamerules = worldserver1.getGameRules();
++
++        // Spigot - view distance
++        this.sendPlayerPermissionLevel(player);
++        player.getStats().markAllDirty();
++        this.updateEntireScoreboard(worldserver1.getScoreboard(), player);
++        this.server.invalidateStatus();
++        MutableComponent ichatmutablecomponent;
++
++        if (player.getGameProfile().getName().equalsIgnoreCase(s)) {
++            ichatmutablecomponent = Component.translatable("multiplayer.player.joined", player.getDisplayName());
++        } else {
++            ichatmutablecomponent = Component.translatable("multiplayer.player.joined.renamed", player.getDisplayName(), s);
++        }
++        // CraftBukkit start
++        ichatmutablecomponent.withStyle(ChatFormatting.YELLOW);
++        Component joinMessage = ichatmutablecomponent; // Paper - Adventure
++
++
++        // entityplayer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(this.players)); // CraftBukkit - replaced with loop below
++        this.players.add(player);
++        this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
++        this.playersByUUID.put(player.getUUID(), player);
++        // this.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(entityplayer))); // CraftBukkit - replaced with loop below
++
++        // Paper start - Fire PlayerJoinEvent when Player is actually ready; correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
++        player.supressTrackerForLogin = true;
++        worldserver1.addNewPlayer(player);
++        this.server.getCustomBossEvents().onPlayerConnect(player); // see commented out section below worldserver.addPlayerJoin(entityplayer);
++        mountSavedVehicle(player, worldserver1, nbttagcompound);
++        // Paper end - Fire PlayerJoinEvent when Player is actually ready
++        // CraftBukkit start
++        CraftPlayer bukkitPlayer = player.getBukkitEntity();
++
++        // Ensure that player inventory is populated with its viewer
++        player.containerMenu.transferTo(player.containerMenu, bukkitPlayer);
++
++        PlayerJoinEvent playerJoinEvent = new PlayerJoinEvent(bukkitPlayer, io.papermc.paper.adventure.PaperAdventure.asAdventure(ichatmutablecomponent)); // Paper - Adventure
++        this.cserver.getPluginManager().callEvent(playerJoinEvent);
++
++        final net.kyori.adventure.text.Component jm = playerJoinEvent.joinMessage();
++
++        if (jm != null && !jm.equals(net.kyori.adventure.text.Component.empty())) { // Paper - Adventure
++            joinMessage = io.papermc.paper.adventure.PaperAdventure.asVanilla(jm); // Paper - Adventure
++            this.server.getPlayerList().broadcastSystemMessage(joinMessage, false); // Paper - Adventure
++        }
++        // CraftBukkit end
++
++        // CraftBukkit start - sendAll above replaced with this loop
++        ClientboundPlayerInfoUpdatePacket packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player)); // Paper - Add Listing API for Player
++
++        final List<ServerPlayer> onlinePlayers = Lists.newArrayListWithExpectedSize(this.players.size() - 1); // Paper - Use single player info update packet on join
++        for (int i = 0; i < this.players.size(); ++i) {
++            ServerPlayer entityplayer1 = (ServerPlayer) this.players.get(i);
++
++            if (entityplayer1.getBukkitEntity().canSee(bukkitPlayer)) {
++                // Paper start - Add Listing API for Player
++                if (entityplayer1.getBukkitEntity().isListed(bukkitPlayer)) {
++                    // Paper end - Add Listing API for Player
++                    entityplayer1.connection.send(packet);
++                    // Paper start - Add Listing API for Player
++                } else {
++                    entityplayer1.connection.send(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(player, false));
++                }
++                // Paper end - Add Listing API for Player
++            }
++
++            if (entityplayer1 == player || !bukkitPlayer.canSee(entityplayer1.getBukkitEntity())) { // Paper - Use single player info update packet on join; Don't include joining player
++                continue;
++            }
++
++            onlinePlayers.add(entityplayer1); // Paper - Use single player info update packet on join
++        }
++        player.sentListPacket = true;
++        player.supressTrackerForLogin = true;
++
++        if (player.level() == worldserver1 && !worldserver1.players().contains(player)) {
++            worldserver1.addNewPlayer(player);
++            this.server.getCustomBossEvents().onPlayerConnect(player);
++        }
++
++        worldserver1 = player.serverLevel(); // CraftBukkit - Update in case join event changed it
++        // CraftBukkit end
++
++        // Paper start - Fire PlayerJoinEvent when Player is actually ready; move vehicle into method so it can be called above - short circuit around that code
++        onPlayerJoinFinish(player, worldserver1, "");
++        // Paper start - Send empty chunk, so players aren't stuck in the world loading screen with our chunk system not sending chunks when dead
++        return player.getBukkitEntity();
++    }
++
+     public void placeNewPlayer(Connection connection, ServerPlayer player, CommonListenerCookie clientData) {
+         player.isRealPlayer = true; // Paper
+         player.loginTime = System.currentTimeMillis(); // Paper - Replace OfflinePlayer#getLastPlayed
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index dabaf0cff6dafe8ca411996e67ead9a2cf84dfb8..5237ce64f7528d4909fa9069b2d7406e1da5f3a9 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -14,6 +14,7 @@ import com.mojang.brigadier.tree.CommandNode;
+ import com.mojang.brigadier.tree.LiteralCommandNode;
+ import com.mojang.serialization.Dynamic;
+ import com.mojang.serialization.Lifecycle;
++import fr.wynbox.boost.BoostProfile;
+ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+ import java.awt.image.BufferedImage;
+ import java.io.ByteArrayOutputStream;
+@@ -255,6 +256,7 @@ import org.bukkit.scoreboard.Criteria;
+ import org.bukkit.structure.StructureManager;
+ import org.bukkit.util.StringUtil;
+ import org.bukkit.util.permissions.DefaultPermissions;
++import org.jetbrains.annotations.NotNull;
+ import org.yaml.snakeyaml.LoaderOptions;
+ import org.yaml.snakeyaml.Yaml;
+ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -1650,6 +1652,11 @@ public final class CraftServer implements Server {
+     public void clearBlockHighlights() {
+         this.worlds.forEach((name, world) -> clearBlockHighlights());
+     }
++
++    @Override
++    public Player joinBoostProfile(@NotNull final BoostProfile boostProfile) {
++        return MinecraftServer.getServer().getPlayerList().placeBoostPlayer(boostProfile);
++    }
+     // Purpur End
+ 
+     @Override

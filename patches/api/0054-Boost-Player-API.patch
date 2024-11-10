@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Sun, 10 Nov 2024 22:04:33 +0100
+Subject: [PATCH] Boost Player API
+
+
+diff --git a/src/main/java/fr/wynbox/boost/BoostProfile.java b/src/main/java/fr/wynbox/boost/BoostProfile.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..41d2f5b5facd9e5f2c9638f3c2305485394c350f
+--- /dev/null
++++ b/src/main/java/fr/wynbox/boost/BoostProfile.java
+@@ -0,0 +1,57 @@
++package fr.wynbox.boost;
++
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import javax.annotation.Nonnull;
++import java.util.UUID;
++
++public class BoostProfile {
++
++    private static final World defaultJoiningWorld = Bukkit.getWorlds().get(0);
++
++    private final UUID uuid;
++    private final String username;
++
++    private String texture, signature;
++    private World joiningWorld = defaultJoiningWorld;
++
++    public BoostProfile(final UUID uuid, final String username) {
++        this.uuid = uuid;
++        this.username = username;
++    }
++
++    public BoostProfile texture(String texture) {
++        this.texture = texture;
++        return this;
++    }
++
++    public BoostProfile signature(String signature) {
++        this.signature = signature;
++        return this;
++    }
++
++    public BoostProfile joiningWorld(@Nonnull World joiningWorld) {
++        this.joiningWorld = joiningWorld;
++        return this;
++    }
++
++    public World getJoiningWorld() {
++        return joiningWorld;
++    }
++
++    public UUID getUuid() {
++        return uuid;
++    }
++
++    public String getUsername() {
++        return username;
++    }
++
++    public String getTexture() {
++        return texture;
++    }
++
++    public String getSignature() {
++        return signature;
++    }
++}
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index c15b0b05870a469ea5d314c9fac6a57a045f463c..b026a8693b81ca739e34c76a834285b3cd248507 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -14,6 +14,7 @@ import java.util.Set;
+ import java.util.UUID;
+ import java.util.function.Consumer;
+ import java.util.logging.Logger;
++import fr.wynbox.boost.BoostProfile;
+ import org.bukkit.Warning.WarningState;
+ import org.bukkit.advancement.Advancement;
+ import org.bukkit.block.data.BlockData;
+@@ -2631,4 +2632,8 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+      */
+     void clearBlockHighlights();
+     // Purpur end
++
++    // Wynbox start
++    Player joinBoostProfile(@NotNull BoostProfile boostProfile);
++    // Wynbox end
+ }
