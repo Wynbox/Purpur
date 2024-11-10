@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Sun, 10 Nov 2024 20:13:17 +0100
+Subject: [PATCH] Implement Biome Cache
+
+
+diff --git a/src/main/java/net/minecraft/world/level/biome/BiomeManager.java b/src/main/java/net/minecraft/world/level/biome/BiomeManager.java
+index 01352cc83b25eb0e30b7e0ff521fc7c1b3d5155b..10ac765036d6e5f220642df3ebd0449016b5291d 100644
+--- a/src/main/java/net/minecraft/world/level/biome/BiomeManager.java
++++ b/src/main/java/net/minecraft/world/level/biome/BiomeManager.java
+@@ -1,11 +1,17 @@
+ package net.minecraft.world.level.biome;
+ 
+ import com.google.common.hash.Hashing;
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.QuartPos;
+ import net.minecraft.util.LinearCongruentialGenerator;
+ import net.minecraft.util.Mth;
++import org.bukkit.Chunk;
++import javax.annotation.Nonnull;
++import javax.annotation.Nullable;
++import java.util.HashMap;
++import java.util.Map;
+ 
+ public class BiomeManager {
+     public static final int CHUNK_CENTER_QUART = QuartPos.fromBlock(8);
+@@ -15,6 +21,21 @@ public class BiomeManager {
+     private final BiomeManager.NoiseBiomeSource noiseBiomeSource;
+     private final long biomeZoomSeed;
+ 
++    // Wynbox Start - Biome Cache
++    private final Map<Long, Holder<Biome>> biomeCache = new HashMap<>();
++    public @Nullable Holder<Biome> getCachedBiome(long chunkKey) {
++        return this.biomeCache.get(chunkKey);
++    }
++
++    public @Nullable Holder<Biome> removeCachedBiome(long chunkKey) {
++        return this.biomeCache.remove(chunkKey);
++    }
++
++    public void setCachedBiome(long chunkKey, @Nonnull Holder<Biome> holder) {
++        this.biomeCache.put(chunkKey, holder);
++    }
++    // Wynbox End
++
+     public BiomeManager(BiomeManager.NoiseBiomeSource storage, long seed) {
+         this.noiseBiomeSource = storage;
+         this.biomeZoomSeed = seed;
+@@ -29,6 +50,15 @@ public class BiomeManager {
+     }
+ 
+     public Holder<Biome> getBiome(BlockPos pos) {
++        // Wynbox Start - Biome Cache
++        if (!this.biomeCache.isEmpty()) {
++            long key = Chunk.getChunkKey(pos.getX() >> 4, pos.getZ() >> 4);
++            Holder<Biome> holder = this.biomeCache.get(key);
++            if (holder != null) {
++                return holder;
++            }
++        }
++        // Wynbox End
+         int i = pos.getX() - 2;
+         int j = pos.getY() - 2;
+         int k = pos.getZ() - 2;
